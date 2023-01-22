@@ -32,45 +32,63 @@ class MyWebServer(socketserver.BaseRequestHandler):
         self.data = self.request.recv(1024).strip()
         print ("Got a request of: %s\n" % self.data)
         request = self.data.decode("utf-8").split(" ")
+        if self.checkErrors(request):
+            return
+        if self.checkSecurity(request):
+            return
+        data = self.getData(request)
+        response = self.getResponse(request, data)
+        self.sendResponse(response)
 
+
+    def checkErrors(self, request):
         # 301 correct path not ending with /
         if os.path.isdir("www" + request[1]) and not request[1].endswith("/"):
             response = "HTTP/1.1 301 Moved Permanently\n" + "Location: " + request[1] + "/\n"
             self.request.sendall(bytearray(response, "utf-8"))
-            return
+            return True
 
         # 405 method not allowed
         if request[0] != "GET":
             response = "HTTP/1.1 405 Method Not Allowed\n" + "Content-Type: text/html\n\n" + "405 Method Not Allowed"
             self.request.sendall(bytearray(response, "utf-8"))
-            return
-
+            return True
+            
         # 404 not found
         if not os.path.exists("www" + request[1]):
             response = "HTTP/1.1 404 Not Found\n" + "Content-Type: text/html\n\n" + "404 Not Found"
             self.request.sendall(bytearray(response, "utf-8"))
-            return
-            
+            return True
+
+        # if no errors return False 
+        return False
+    
+    def checkSecurity(self, request):
         # security check
         if ".." in request[1]:
             response = "HTTP/1.1 404 Not Found\n" + "Content-Type: text/html\n\n" + "404 Not Found"
             self.request.sendall(bytearray(response, "utf-8"))
-            return
+            return True
+        return False
 
+    def getData(self, request):
         # get data from file
         if request[1].endswith("/"):
             request[1] = request[1] + "index.html"
         f = open("www" + request[1], "r")
         data = f.read()
-        f.close()\
+        f.close()
+        return data
 
+    def getResponse(self, request, data):
         # create response 
         if request[1].endswith(".css"):
             content_type = "text/css"
         else:
             content_type = "text/html"
-        response = "HTTP/1.1 200 OK\n" + "Content-Type: " + content_type + "\n\n" + data
+        return "HTTP/1.1 200 OK\n" + "Content-Type: " + content_type + "\n\n" + data
 
+    def sendResponse(self, response):
         # send response
         self.request.sendall(bytearray(response, "utf-8"))
 
