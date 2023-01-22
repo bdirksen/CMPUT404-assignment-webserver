@@ -1,5 +1,5 @@
 #  coding: utf-8 
-import socketserver
+import socketserver, os
 
 # Copyright 2013 Abram Hindle, Eddie Antonio Santos
 # 
@@ -26,13 +26,54 @@ import socketserver
 
 # try: curl -v -X GET http://127.0.0.1:8080/
 
-
 class MyWebServer(socketserver.BaseRequestHandler):
     
     def handle(self):
         self.data = self.request.recv(1024).strip()
         print ("Got a request of: %s\n" % self.data)
-        self.request.sendall(bytearray("OK",'utf-8'))
+        request = self.data.decode("utf-8").split(" ")
+
+        # 301 correct path not ending with /
+        if os.path.isdir("www" + request[1]) and not request[1].endswith("/"):
+            response = "HTTP/1.1 301 Moved Permanently\n" + "Location: " + request[1] + "/\n"
+            self.request.sendall(bytearray(response, "utf-8"))
+            return
+
+        # 405 method not allowed
+        if request[0] != "GET":
+            response = "HTTP/1.1 405 Method Not Allowed\n" + "Content-Type: text/html\n\n" + "405 Method Not Allowed"
+            self.request.sendall(bytearray(response, "utf-8"))
+            return
+
+        # 404 not found
+        if not os.path.exists("www" + request[1]):
+            response = "HTTP/1.1 404 Not Found\n" + "Content-Type: text/html\n\n" + "404 Not Found"
+            self.request.sendall(bytearray(response, "utf-8"))
+            return
+            
+        # security check
+        if ".." in request[1]:
+            response = "HTTP/1.1 404 Not Found\n" + "Content-Type: text/html\n\n" + "404 Not Found"
+            self.request.sendall(bytearray(response, "utf-8"))
+            return
+
+        # get data from file
+        if request[1].endswith("/"):
+            request[1] = request[1] + "index.html"
+        f = open("www" + request[1], "r")
+        data = f.read()
+        f.close()\
+
+        # create response 
+        if request[1].endswith(".css"):
+            content_type = "text/css"
+        else:
+            content_type = "text/html"
+        response = "HTTP/1.1 200 OK\n" + "Content-Type: " + content_type + "\n\n" + data
+
+        # send response
+        self.request.sendall(bytearray(response, "utf-8"))
+
 
 if __name__ == "__main__":
     HOST, PORT = "localhost", 8080
